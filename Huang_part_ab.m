@@ -21,62 +21,42 @@ T_long2 = rmmissing(T_long2);
 
 % 将两个table合并
 returnsTable = innerjoin(T_long1,T_long2);
+%-----------------------
+day=returnsTable.date;
+day1=char(day);
+yymm=year(day1)*12+month(day1);
+returnsTable.yymm=yymm;
 
-% b-half
-% 输入变量
-K = 3;
-numGroups = 5;
+% b
+% 处理数据，保留所有股票都有的date,防止持有某一组合到下一期时其中股票缺失
+[G,yymm]=findgroups(returnsTable.yymm);
+[G2,code]=findgroups(returnsTable.code);
+global reserve_yymm
+reserve_yymm=yymm(1:96);%由于各股票数据残缺情况不一致，决定保留有前96个月的股票
+signal=splitapply(@dataclean,returnsTable.yymm,G2);
+returnsTable.signal=cell2mat(signal);
+returnsTable=returnsTable(returnsTable.signal==1,:);
+[G,yymm]=findgroups(returnsTable.yymm);%得到新表的分组
+[G2,code]=findgroups(returnsTable.code);
 
-% 筛选出年份大于2年的公司
-companyCounts = groupsummary(returnsTable, 'name');
-rowsToRemove = companyCounts.GroupCount < 24;
-companyCounts(rowsToRemove, :) = [];
-returnsTable = innerjoin(returnsTable,companyCounts);
+global k
+k=3;
+returns_3=splitapply(@lastreturn,returnsTable.return_m,G2);
+returnsTable.returns=cell2mat(returns_3);
+returnsTable_3=returnsTable(returnsTable.returns~=0,:);%得到k=3的表格
+k=6;
+returns_6=splitapply(@lastreturn,returnsTable.return_m,G2);
+returnsTable.returns=cell2mat(returns_6);
+returnsTable_6=returnsTable(returnsTable.returns~=0,:);%得到k=6的表格
+k=12;
+returns_12=splitapply(@lastreturn,returnsTable.return_m,G2);
+returnsTable.returns=cell2mat(returns_12);
+returnsTable_12=returnsTable(returnsTable.returns~=0,:);
+k=24;
+returns_24=splitapply(@lastreturn,returnsTable.return_m,G2);
+returnsTable.returns=cell2mat(returns_24);
+returnsTable_24=returnsTable(returnsTable.returns~=0,:);
 
-% 进行收益率的计算
-returnsTable1 = table();
-returnsTable1.name = companyCounts.name;
-returnsTable1 = sortrows(returnsTable1,"name","ascend");
-returnsTable = sortrows(returnsTable,"name","ascend");
-
-returnsTable1.returnsK = zeros(height(returnsTable1), 1);% 初始化矩阵列
-
-for i = 1:height(returnsTable1)
-    if i==1
-        start = 115 - K;
-    % 选择过去 K 个月的收益率
-        pastReturns = returnsTable.return_m(start:start+K);
-        
-        % 计算累积收益率
-        cumulativeReturn = prod(1 + 0.01*pastReturns) - 1;
-        
-        % 存储结果
-        returnsTable1.returnsK(i) = cumulativeReturn*100;
-    else
-        start = start + companyCounts.GroupCount(i) - K;
-        % 选择过去 K 个月的收益率
-        pastReturns = returnsTable.return_m(start:start+K);
-            
-            % 计算累积收益率
-        cumulativeReturn = prod(1 + 0.01*pastReturns) - 1;
-            
-            % 存储结果
-        returnsTable1.returnsK(i) = cumulativeReturn*100;
-    end
-end
-
-% 合并
-mergedTable = innerjoin(returnsTable,returnsTable1);
-
-% 根据收益率分为五组
-values = mergedTable.returnsK;
-quantileEdges = quantile(values, linspace(0, 1, numGroups + 1));
-
-% 对数据进行分组
-groupIDs = discretize(values, quantileEdges);
-
-% 将分组结果添加到原始表中
-mergedTable.Group = groupIDs;
 
 
 
